@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MySocial - Рабочая соцсеть</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif;}
+  body{background:#f0f2f5;color:#333;}
+  header{background:#4b6cb7;color:white;padding:15px;text-align:center;font-size:24px;font-weight:bold;}
+  .section{display:none;padding:15px;max-width:600px;margin:auto;}
+  .section.active{display:block;}
+  input,textarea,select,button{width:100%;padding:10px;margin:5px 0;border-radius:8px;border:1px solid #ccc;}
+  button{background:#4b6cb7;color:white;border:none;font-weight:bold;cursor:pointer;transition:0.3s;}
+  button:hover{background:#182848;}
+  .post,.message,.user-card{background:#fff;padding:10px;margin-bottom:10px;border-radius:10px;border:1px solid #ddd;}
+  .chat{height:200px;overflow-y:auto;border:1px solid #ccc;padding:10px;border-radius:8px;margin-bottom:10px;}
+  .user-card img{width:40px;height:40px;border-radius:50%;margin-right:10px;vertical-align:middle;}
+  .avatar-preview{width:80px;height:80px;border-radius:50%;display:block;margin-top:10px;}
+</style>
+</head>
+<body>
+<header>MySocial</header>
+
+<!-- Регистрация и Вход -->
+<div id="auth" class="section active">
+  <h2>Регистрация</h2>
+  <input type="text" id="regName" placeholder="Никнейм">
+  <input type="password" id="regPass" placeholder="Пароль">
+  <button onclick="register()">Зарегистрироваться</button>
+  <h2>Вход</h2>
+  <input type="text" id="loginName" placeholder="Никнейм">
+  <input type="password" id="loginPass" placeholder="Пароль">
+  <button onclick="login()">Войти</button>
+</div>
+
+<!-- Профиль -->
+<div id="profile" class="section">
+  <h2>Профиль: <span id="profileName"></span></h2>
+  <p>Статус: <span id="profileStatus">Онлайн</span></p>
+  <input type="text" id="newStatus" placeholder="Изменить статус">
+  <input type="file" id="avatarFile">
+  <button onclick="updateProfile()">Сохранить</button>
+  <img id="avatarImg" class="avatar-preview" src="" alt="">
+  <button onclick="showSection('feed')">Перейти в ленту</button>
+  <button onclick="showSection('chat')">Перейти в чаты</button>
+</div>
+
+<!-- Лента постов -->
+<div id="feed" class="section">
+  <h2>Лента</h2>
+  <div id="postsContainer"></div>
+  <h3>Создать пост</h3>
+  <input type="text" id="postTitle" placeholder="Заголовок">
+  <textarea id="postContent" placeholder="Текст поста"></textarea>
+  <button onclick="createPost()">Опубликовать</button>
+  <button onclick="showSection('profile')">Назад в профиль</button>
+</div>
+
+<!-- Чаты -->
+<div id="chat" class="section">
+  <h2>Чаты</h2>
+  <div class="chat" id="chatBox"></div>
+  <input type="text" id="chatUser" placeholder="Кому">
+  <textarea id="chatMessage" placeholder="Сообщение"></textarea>
+  <button onclick="sendMessage()">Отправить</button>
+  <button onclick="showSection('profile')">Назад в профиль</button>
+</div>
+
+<script>
+  // --- Хранилище ---
+  let users = JSON.parse(localStorage.getItem('ms_users')||'[]');
+  let messages = JSON.parse(localStorage.getItem('ms_messages')||'[]');
+  let posts = JSON.parse(localStorage.getItem('ms_posts')||'[]');
+  let currentUser = null;
+
+  function showSection(id){
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  // --- Регистрация ---
+  function register(){
+    const name = document.getElementById('regName').value.trim();
+    const pass = document.getElementById('regPass').value.trim();
+    if(!name||!pass){ alert('Введите ник и пароль'); return; }
+    if(users.find(u=>u.name===name)){ alert('Пользователь уже существует'); return; }
+    users.push({name,pass,status:'Онлайн',avatar:''});
+    localStorage.setItem('ms_users',JSON.stringify(users));
+    alert('Зарегистрировано!');
+  }
+
+  // --- Вход ---
+  function login(){
+    const name = document.getElementById('loginName').value.trim();
+    const pass = document.getElementById('loginPass').value.trim();
+    const user = users.find(u=>u.name===name && u.pass===pass);
+    if(!user){ alert('Неверные данные'); return; }
+    currentUser=user;
+    document.getElementById('profileName').innerText=user.name;
+    document.getElementById('profileStatus').innerText=user.status;
+    if(user.avatar) document.getElementById('avatarImg').src=user.avatar;
+    renderPosts();
+    renderMessages();
+    showSection('profile');
+  }
+
+  // --- Профиль ---
+  function updateProfile(){
+    const status = document.getElementById('newStatus').value.trim();
+    const file = document.getElementById('avatarFile').files[0];
+    if(status){ currentUser.status=status; document.getElementById('profileStatus').innerText=status; }
+    if(file){
+      const reader = new FileReader();
+      reader.onload=function(){ currentUser.avatar=reader.result; document.getElementById('avatarImg').src=reader.result; saveUsers(); }
+      reader.readAsDataURL(file);
+    } else saveUsers();
+  }
+
+  function saveUsers(){ 
+    users = users.map(u=>u.name===currentUser.name?currentUser:u); 
+    localStorage.setItem('ms_users',JSON.stringify(users)); 
+  }
+
+  // --- Посты ---
+  function createPost(){
+    const title = document.getElementById('postTitle').value.trim();
+    const content = document.getElementById('postContent').value.trim();
+    if(!title||!content){ alert('Введите заголовок и текст'); return; }
+    posts.unshift({id:Date.now(),title,content,author:currentUser.name});
+    localStorage.setItem('ms_posts',JSON.stringify(posts));
+    document.getElementById('postTitle').value='';
+    document.getElementById('postContent').value='';
+    renderPosts();
+  }
+
+  function renderPosts(){
+    const container = document.getElementById('postsContainer');
+    container.innerHTML='';
+    posts.forEach(post=>{
+      const div=document.createElement('div');
+      div.className='post';
+      div.innerHTML=`<strong>${post.author}</strong><h4>${post.title}</h4><p>${post.content}</p>`;
+      container.appendChild(div);
+    });
+  }
+
+  // --- Сообщения ---
+  function sendMessage(){
+    const to=document.getElementById('chatUser').value.trim();
+    const msg=document.getElementById('chatMessage').value.trim();
+    if(!to||!msg){ alert('Введите ник и сообщение'); return; }
+    if(!users.find(u=>u.name===to)){ alert('Пользователь не найден'); return; }
+    messages.push({from:currentUser.name,to,msg});
+    localStorage.setItem('ms_messages',JSON.stringify(messages));
+    document.getElementById('chatMessage').value='';
+    renderMessages();
+  }
+
+  function renderMessages(){
+    const box=document.getElementById('chatBox');
+    box.innerHTML='';
+    messages.filter(m=>m.from===currentUser.name||m.to===currentUser.name)
+      .forEach(m=>{
+        const div=document.createElement('div'); div.className='message';
+        div.innerText=`${m.from} -> ${m.to}: ${m.msg}`; box.appendChild(div);
+      });
+  }
+</script>
+</body>
+</html>
